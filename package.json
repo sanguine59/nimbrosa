@@ -10,7 +10,8 @@
     "migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {
-    "pg": "^8.13.1"
+    "pg": "^8.22.0",
+    "pg-boss": "^12.25.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
