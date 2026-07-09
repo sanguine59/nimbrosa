@@ -32,6 +32,8 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+const WEBHOOK_SERVER_PORT = parseInt(process.env.WEBHOOK_SERVER_PORT  ?? '',10) || 3000
+
 async function main() {
   const boss = new PgBoss(dbUrl as string);
   await boss.start();
@@ -66,7 +68,7 @@ async function main() {
     }
   });
 
-  server.listen(3000, () => console.log("listening on :3000"));
+  server.listen(WEBHOOK_SERVER_PORT, () => console.log(`listening on :${WEBHOOK_SERVER_PORT}`));
 }
 
 main().catch((err) => {
