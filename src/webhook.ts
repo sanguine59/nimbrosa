@@ -1,6 +1,6 @@
 import * as crypto from 'crypto'
 
-interface WebhookHeaders {
+export interface WebhookHeaders {
   "webhook-id": string;
   "webhook-timestamp": string;
   "webhook-signature": string;
@@ -30,7 +30,7 @@ function forgeSignature(id: string, timestamp: Date, payload: string) {
   return `v1,${expectedSignature}`
 }
 
-function verifyHeaders (
+export function verifyHeaders (
   headers: WebhookHeaders,
   payload: string
 ) {
