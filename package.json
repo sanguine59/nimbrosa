@@ -10,10 +10,12 @@
     "migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "pg": "^8.22.0",
     "pg-boss": "^12.25.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
     "tsx": "^4.19.2",

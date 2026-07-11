@@ -8,16 +8,30 @@ async function main (){
     res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173');
     res.setHeader('Access-Control-Allow-Methods', 'GET');
     if(req.method == 'GET' && req.url == '/raw') {
-      const row = await getRaw(pool);
-      res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(row));
-      return;
+      try{
+        const row = await getRaw(pool);
+        res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(row));
+        return;
+      } catch (err) {
+        console.error(err);
+        res.writeHead(500).end();
+        return;
+      }
     }
 
     if(req.method == 'GET' && req.url == '/processed'){
-      const row = await getProcessed(pool);
-      res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(row));
-      return;
+      try{
+        const row = await getProcessed(pool);
+        res.writeHead(200, {'Content-Type': 'application/json'}).end(JSON.stringify(row));
+        return;
+      } catch (err) {
+        console.error(err);
+        res.writeHead(500).end();
+        return;
+      }
     }
+
+    res.writeHead(404).end();
   });
 
   server.listen(3001, () => console.log('listening on localhost:3001'))
