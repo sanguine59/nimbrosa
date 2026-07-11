@@ -107,3 +107,53 @@ export async function linkComplaintToReport(
     client.release();
   }
 }
+
+interface Raw {
+  id: string;
+  raw_text: string;
+  received_at: string;
+  processed_report_id: string;
+  status: string;
+}
+
+export async function getRaw(pool: pg.Pool): Promise<Raw[]> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<Raw>(
+      `SELECT id, raw_text, received_at, processed_report_id, status FROM raw_complaints`,
+    );
+    await client.query('COMMIT');
+    return rows;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+interface Processed {
+  id: string;
+  structured_report: StructuredReport;
+  canonical_summary: string;
+  created_at: string;  
+  match_count: number;
+}
+
+export async function getProcessed(pool: pg.Pool): Promise<Processed[]> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<Processed> (
+      `SELECT id, structured_report, canonical_summary, created_at, match_count FROM processed_reports`
+    );
+    await client.query('COMMIT');
+    return rows;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
