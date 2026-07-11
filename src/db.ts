@@ -1,5 +1,6 @@
 import pg from 'pg';
 import type { StructuredReport } from './llm-client.js';
+import { CLIENT_RENEG_LIMIT } from 'node:tls';
 
 export type ComplaintStatus = 'pending' | 'matched' | 'new_report_created';
 
@@ -106,4 +107,33 @@ export async function linkComplaintToReport(
   } finally {
     client.release();
   }
+}
+
+interface Raw {
+  id: string;
+  raw_text: string;
+  received_at: string;
+  processed_report_id: string;
+  status: string;
+}
+
+export async function getRaw(pool: pg.Pool): Promise<Raw[]> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await pool.query<Raw>(
+      `SELECT id, raw_text, received_at, processed_report_id, status FROM raw_complaints`,
+    );
+    await client.query('COMMIT')
+    return rows;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err
+  } finally {
+    client.release()
+  }
+}
+
+interface Processed {
+
 }
