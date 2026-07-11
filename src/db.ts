@@ -121,7 +121,7 @@ export async function getRaw(pool: pg.Pool): Promise<Raw[]> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await pool.query<Raw>(
+    const { rows } = await client.query<Raw>(
       `SELECT id, raw_text, received_at, processed_report_id, status FROM raw_complaints`,
     );
     await client.query('COMMIT')
