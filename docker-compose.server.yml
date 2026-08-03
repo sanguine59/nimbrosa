@@ -1,0 +1,46 @@
+# Postgres for a shared self-hosted box, where docker-compose.yml cannot be used
+# as-is: it binds 5432 and 5050, and on that host both are already taken.
+#
+# This file brings up only the database, on 5433, under its own volume and
+# network. It does not touch any existing container.
+#
+# pgvector/pgvector:pg16 is required, not a preference — migrations/init.sql
+# runs CREATE EXTENSION vector and the schema uses vector() columns, neither of
+# which a stock postgres image can do.
+#
+#   POSTGRES_PASSWORD=... docker compose -f docker-compose.server.yml up -d
+#
+# To let jobs on a containerised act_runner reach it by name:
+#
+#   docker network connect nimbrosa gitea-runner
+#
+# Pinned so the volume and network names do not depend on the checkout
+# directory name.
+name: nimbrosa
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: nimbrosa-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nimbrosa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD before starting}
+      POSTGRES_DB: ${POSTGRES_DB:-nimbrosa}
+    ports:
+      # host:container — 5432 on the host belongs to the existing postgres-db.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - nimbrosa-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nimbrosa} -d ${POSTGRES_DB:-nimbrosa}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  nimbrosa-pgdata:
+
+networks:
+  default:
+    name: nimbrosa
