@@ -35,11 +35,20 @@ export function resolveEmbeddingConfig(overrides?: Partial<EmbeddingConfig>): Em
     );
   }
 
-  return {
-    apiKey: resolveApiKey(overrides?.apiKey),
-    baseUrl: resolveBaseUrl(overrides?.baseUrl),
-    model,
-  };
+  // Embeddings may come from a different host than the structuring LLM — a
+  // self-hosted text-embeddings-inference server, say, with the LLM still on
+  // OpenRouter. Falls back to the shared base URL when unset.
+  const baseUrl = overrides?.baseUrl ?? process.env.EMBEDDING_BASE_URL ?? resolveBaseUrl();
+
+  // A self-hosted embedding server usually has no auth, so do not demand an
+  // OpenRouter key just to talk to it. The header is still sent; local servers
+  // ignore it.
+  const isSelfHosted = Boolean(process.env.EMBEDDING_BASE_URL) || Boolean(overrides?.baseUrl);
+  const apiKey = isSelfHosted
+    ? (overrides?.apiKey ?? process.env.EMBEDDING_API_KEY ?? process.env.OPENROUTER_API_KEY ?? 'local')
+    : resolveApiKey(overrides?.apiKey);
+
+  return { apiKey, baseUrl, model };
 }
 
 export function resolveLLMConfig(overrides?: Partial<LLMConfig>): LLMConfig {
