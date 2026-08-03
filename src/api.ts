@@ -11,6 +11,12 @@ async function main (){
     res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
     res.setHeader('Access-Control-Allow-Methods', 'GET');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+
+    if(req.method == 'GET' && req.url == '/health') {
+      res.writeHead(200, {'Content-Type': 'application/json'}).end('{"status":"ok"}');
+      return;
+    }
+
     if(req.method == 'GET' && req.url == '/raw') {
       try{
         const row = await getRaw(pool);
@@ -39,6 +45,25 @@ async function main (){
   });
 
   server.listen(API_PORT, () => console.log(`listening on :${API_PORT}`))
+
+  let shuttingDown = false;
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(signal, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      console.log(`${signal} received, shutting down`);
+
+      server.close(async () => {
+        try {
+          await pool.end();
+        } catch (err) {
+          console.error('error during shutdown', err);
+        } finally {
+          process.exit(0);
+        }
+      });
+    });
+  }
 }
 
 main().catch((err) => {

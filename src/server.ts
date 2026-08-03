@@ -47,6 +47,11 @@ async function main() {
   });
 
   const server = createServer(async (req, res) => {
+    if (req.method === "GET" && req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" }).end('{"status":"ok"}');
+      return;
+    }
+
     if (req.method !== "POST") {
       res.writeHead(405).end();
       return;
@@ -72,6 +77,26 @@ async function main() {
   });
 
   server.listen(WEBHOOK_SERVER_PORT, () => console.log(`listening on :${WEBHOOK_SERVER_PORT}`));
+
+  let shuttingDown = false;
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      console.log(`${signal} received, shutting down`);
+
+      server.close(async () => {
+        try {
+          await boss.stop({ graceful: true });
+          await pool.end();
+        } catch (err) {
+          console.error("error during shutdown", err);
+        } finally {
+          process.exit(0);
+        }
+      });
+    });
+  }
 }
 
 main().catch((err) => {
