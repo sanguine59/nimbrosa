@@ -45,6 +45,10 @@ function parsePaging(url: URL): Paging | null {
 async function main (){
   const apiToken = resolveApiToken()
   const pool = createPool()
+
+  // Without a listener, an idle client losing its connection is an unhandled
+  // 'error' event and terminates the process. Requests recover on their own.
+  pool.on('error', (err) => console.error('idle client error', err))
   const server = createServer(async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN);
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');

@@ -39,10 +39,17 @@ async function main() {
   const webhookConfig = resolveWebhookConfig();
 
   const boss = new PgBoss(dbUrl as string);
+
+  // EventEmitters throw if an 'error' event has no listener, so a dropped
+  // database connection would otherwise take the whole process down. A lost
+  // connection is transient: the pool reconnects on the next acquire.
+  boss.on("error", (err) => console.error("pg-boss error", err));
+
   await boss.start();
   await boss.createQueue(INPUT_QUEUE);
 
   const pool = createPool(dbUrl);
+  pool.on("error", (err) => console.error("idle client error", err));
 
   await boss.work<{ text: string }>(INPUT_QUEUE, async ([job]) => {
     await processRawComplaint(job.data.text, { pool });
