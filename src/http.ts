@@ -40,8 +40,10 @@ function retryDelayMs(attempt: number, response: Response | undefined, opts: Req
       return Math.min(seconds * 1000, opts.capDelayMs);
     }
   }
+  // Equal jitter rather than full jitter: full jitter can return a near-zero
+  // delay and immediately re-hit a service that just asked us to back off.
   const exp = Math.min(opts.baseDelayMs * 2 ** (attempt - 1), opts.capDelayMs);
-  return Math.random() * exp;
+  return exp / 2 + Math.random() * (exp / 2);
 }
 
 export async function resilientFetch(

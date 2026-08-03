@@ -6,33 +6,56 @@ export interface WebhookHeaders {
   "webhook-signature": string;
 }
 
-const TOLERANCE = parseInt(process.env.WEBHOOK_TIMESTAMP_TOLERANCE ?? '', 10) || 5 * 60
-const key = process.env.WEBHOOK_SECRET_KEY
-if(!key) throw new Error('Missing WEBHOOK_SECRET_KEY')
-const ENCODE_ALG = process.env.WEBHOOK_ENCODE_ALG || 'sha256'
-const DIGEST_METHOD = (process.env.WEBHOOK_DIGEST_METHOD || 'base64') as crypto.BinaryToTextEncoding
+export interface WebhookConfig {
+  secretKey: string;
+  toleranceSeconds: number;
+  encodeAlg: string;
+  digestMethod: crypto.BinaryToTextEncoding;
+}
 
-function verifyTimestamp(time: string): Date{
+export function resolveWebhookConfig(overrides?: Partial<WebhookConfig>): WebhookConfig {
+  const secretKey = overrides?.secretKey ?? process.env.WEBHOOK_SECRET_KEY
+  if (!secretKey) {
+    throw new Error('Missing webhook signing secret (WEBHOOK_SECRET_KEY)')
+  }
+
+  return {
+    secretKey,
+    toleranceSeconds:
+      overrides?.toleranceSeconds ??
+      (parseInt(process.env.WEBHOOK_TIMESTAMP_TOLERANCE ?? '', 10) || 5 * 60),
+    encodeAlg: overrides?.encodeAlg ?? (process.env.WEBHOOK_ENCODE_ALG || 'sha256'),
+    digestMethod:
+      overrides?.digestMethod ??
+      ((process.env.WEBHOOK_DIGEST_METHOD || 'base64') as crypto.BinaryToTextEncoding),
+  }
+}
+
+function verifyTimestamp(time: string, toleranceSeconds: number): Date{
   const now = Math.floor(Date.now() / 1000)
   const timestamp = parseInt(time, 10)
 
-  if(isNaN(timestamp) || (now - timestamp > TOLERANCE) || (timestamp > now + TOLERANCE)) {
-    throw new Error('Invalid signature') 
+  if(isNaN(timestamp) || (now - timestamp > toleranceSeconds) || (timestamp > now + toleranceSeconds)) {
+    throw new Error('Invalid signature')
   }
-  
+
   return new Date(timestamp * 1000)
 }
 
-function forgeSignature(id: string, timestamp: Date, payload: string) {
+function forgeSignature(id: string, timestamp: Date, payload: string, config: WebhookConfig) {
   const timestampNum = Math.floor(timestamp.getTime() / 1000)
   const signed = `${id}.${timestampNum}.${payload}`
-  const expectedSignature = crypto.createHmac(ENCODE_ALG, key as string).update(signed).digest(DIGEST_METHOD)
+  const expectedSignature = crypto
+    .createHmac(config.encodeAlg, config.secretKey)
+    .update(signed)
+    .digest(config.digestMethod)
   return `v1,${expectedSignature}`
 }
 
 export function verifyHeaders (
   headers: WebhookHeaders,
-  payload: string
+  payload: string,
+  config: WebhookConfig
 ) {
   const id = headers["webhook-id"]
   const timestamp = headers["webhook-timestamp"]
@@ -42,9 +65,9 @@ export function verifyHeaders (
     throw new Error('Missing headers')
   }
 
-  const verifiedTimestamp = verifyTimestamp(timestamp)
+  const verifiedTimestamp = verifyTimestamp(timestamp, config.toleranceSeconds)
 
-  const expected = forgeSignature(id, verifiedTimestamp, payload)
+  const expected = forgeSignature(id, verifiedTimestamp, payload, config)
   const expectedSig = Buffer.from(expected.split(',')[1])
   const actualSig = Buffer.from(signature.split(',')[1])
 

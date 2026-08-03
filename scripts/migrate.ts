@@ -5,6 +5,35 @@ import pg from 'pg';
 
 const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'migrations');
 
+/**
+ * The vector column width is baked in at migration time, and migrations only
+ * ever run once. Changing EMBEDDING_DIMENSIONS afterwards would otherwise be
+ * silently ignored here and only surface much later, as an opaque pgvector
+ * dimension-mismatch error on the first insert.
+ */
+async function assertDimensionsMatch(client: pg.Client, dimensions: number): Promise<void> {
+  const { rows } = await client.query<{ table: string; column: string; type: string }>(
+    `SELECT c.relname AS table, a.attname AS column, format_type(a.atttypid, a.atttypmod) AS type
+       FROM pg_attribute a
+       JOIN pg_class c ON c.oid = a.attrelid
+      WHERE c.relname IN ('processed_reports', 'raw_complaints')
+        AND a.attname IN ('summary_vector', 'input_vector')`,
+  );
+
+  for (const row of rows) {
+    const actual = Number(row.type.match(/^vector\((\d+)\)$/)?.[1]);
+    if (Number.isInteger(actual) && actual !== dimensions) {
+      throw new Error(
+        `EMBEDDING_DIMENSIONS is ${dimensions}, but ${row.table}.${row.column} is ` +
+          `${row.type}. The column width is fixed when migrations first run and is not ` +
+          `altered by re-running them. Changing embedding model means recreating the ` +
+          `schema and re-embedding existing rows: drop the tables (or use a fresh ` +
+          `database), then run the migration again with the new dimension.`,
+      );
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const dimensions = Number(process.env.EMBEDDING_DIMENSIONS);
   if (!Number.isInteger(dimensions) || dimensions <= 0) {
@@ -53,6 +82,8 @@ async function main(): Promise<void> {
         throw err;
       }
     }
+
+    await assertDimensionsMatch(client, dimensions);
   } finally {
     await client.end();
   }
