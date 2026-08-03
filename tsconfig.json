@@ -13,5 +13,8 @@
     "declaration": true,
     "sourceMap": true
   },
-  "include": ["src/**/*", "scripts/**/*"]
+  "include": ["src/**/*", "scripts/**/*"],
+  // src/web is a separate Vite app with its own tsconfig, JSX settings and
+  // bundler resolution. Compiling it with the Node-targeted config here fails.
+  "exclude": ["node_modules", "dist", "src/web"]
 }
