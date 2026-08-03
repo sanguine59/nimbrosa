@@ -2,7 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Every branch, not just main. Merging to main is what deploys, so a branch
+    # push is the last point where a typecheck or lint failure is still cheap;
+    # scoped to main, that feedback only arrived after it had already shipped.
+    #
+    # '**' rather than '*' — branches here are ci/deploy, feat/web and the like,
+    # and a single star does not cross the slash.
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
@@ -104,6 +110,9 @@ jobs:
   deploy:
     name: Deploy
     needs: [backend, web]
+    # The only thing keeping a deploy off feature branches, now that push fires
+    # on all of them. Both halves matter: event_name excludes pull_request,
+    # whose ref is refs/pull/N/merge and which may carry untrusted code.
     if: gitea.event_name == 'push' && gitea.ref == 'refs/heads/main'
     runs-on: self-hosted
     # Its own group, deliberately without cancel-in-progress: the workflow-level
