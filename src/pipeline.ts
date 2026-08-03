@@ -8,8 +8,8 @@ import {
   type PipelineConfig,
 } from './config.js';
 import {
+  finalizeComplaint,
   findNearestReport,
-  insertProcessedReport,
   insertRawComplaint,
   linkComplaintToReport,
   setInputVector,
@@ -66,18 +66,29 @@ export async function processRawComplaint(
 
   const { structuredReport, canonicalSummary } = await structureComplaint(rawText, llmConfig);
   const summaryVector = await callOpenRouterEmbedding(canonicalSummary, embeddingConfig);
-  const reportId = await insertProcessedReport(
-    pool,
+
+  const finalized = await finalizeComplaint(pool, {
     complaintId,
+    inputVector,
+    similarityThreshold,
     structuredReport,
     canonicalSummary,
     summaryVector,
-  );
+  });
+
+  if (finalized.outcome === 'matched') {
+    return {
+      outcome: 'matched',
+      complaintId,
+      reportId: finalized.reportId,
+      similarity: finalized.similarity,
+    };
+  }
 
   return {
     outcome: 'new_report_created',
     complaintId,
-    reportId,
+    reportId: finalized.reportId,
     nearestSimilarity: nearest?.similarity ?? null,
   };
 }
