@@ -1,7 +1,8 @@
 import { createServer, IncomingMessage, type IncomingHttpHeaders } from "http";
 import { PgBoss } from "pg-boss";
 import { verifyHeaders, type WebhookHeaders } from "./webhook.js";
-import { ingestComplaint } from "./index.js";
+import { createPool } from "./db.js";
+import { processRawComplaint } from "./pipeline.js";
 
 const dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) throw new Error("Missing DATABASE_URL");
@@ -39,11 +40,18 @@ async function main() {
   await boss.start();
   await boss.createQueue(INPUT_QUEUE);
 
+  const pool = createPool(dbUrl);
+
   await boss.work<{ text: string }>(INPUT_QUEUE, async ([job]) => {
-    await ingestComplaint(job.data.text);
+    await processRawComplaint(job.data.text, { pool });
   });
 
   const server = createServer(async (req, res) => {
+    if (req.method === "GET" && req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" }).end('{"status":"ok"}');
+      return;
+    }
+
     if (req.method !== "POST") {
       res.writeHead(405).end();
       return;
@@ -69,6 +77,26 @@ async function main() {
   });
 
   server.listen(WEBHOOK_SERVER_PORT, () => console.log(`listening on :${WEBHOOK_SERVER_PORT}`));
+
+  let shuttingDown = false;
+  for (const signal of ["SIGTERM", "SIGINT"] as const) {
+    process.on(signal, () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
+      console.log(`${signal} received, shutting down`);
+
+      server.close(async () => {
+        try {
+          await boss.stop({ graceful: true });
+          await pool.end();
+        } catch (err) {
+          console.error("error during shutdown", err);
+        } finally {
+          process.exit(0);
+        }
+      });
+    });
+  }
 }
 
 main().catch((err) => {
