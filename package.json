@@ -4,10 +4,17 @@
   "private": true,
   "description": "Customer complaint processing pipeline — dedupes unstructured complaints into structured reports",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
+    "start:api": "node --env-file-if-exists=.env dist/src/api.js",
+    "start:webhook": "node --env-file-if-exists=.env dist/src/server.js",
+    "dev:api": "tsx watch --env-file-if-exists=.env src/api.ts",
+    "dev:webhook": "tsx watch --env-file-if-exists=.env src/server.ts"
   },
   "dependencies": {
     "cors": "^2.8.6",
