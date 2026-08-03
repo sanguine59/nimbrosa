@@ -1,6 +1,6 @@
 import { createServer, IncomingMessage, type IncomingHttpHeaders } from "http";
 import { PgBoss } from "pg-boss";
-import { verifyHeaders, type WebhookHeaders } from "./webhook.js";
+import { verifyHeaders, resolveWebhookConfig, type WebhookHeaders } from "./webhook.js";
 import { createPool } from "./db.js";
 import { processRawComplaint } from "./pipeline.js";
 
@@ -36,6 +36,8 @@ async function readBody(req: IncomingMessage): Promise<string> {
 const WEBHOOK_SERVER_PORT = parseInt(process.env.WEBHOOK_SERVER_PORT  ?? '',10) || 3000
 
 async function main() {
+  const webhookConfig = resolveWebhookConfig();
+
   const boss = new PgBoss(dbUrl as string);
   await boss.start();
   await boss.createQueue(INPUT_QUEUE);
@@ -67,7 +69,7 @@ async function main() {
     }
 
     try {
-      verifyHeaders(normalizeHeaders(req.headers), rawBody);
+      verifyHeaders(normalizeHeaders(req.headers), rawBody, webhookConfig);
     } catch (err) {
       console.warn("webhook signature rejected:", (err as Error).message);
       res.writeHead(401).end();
