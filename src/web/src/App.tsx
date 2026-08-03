@@ -114,8 +114,9 @@ function App() {
       {source === 'simulated' && (
         <p className="notice">
           Running against a local stand-in: hashed bag-of-words vectors and a rule-based
-          structurer, no API key or database required. Start <code>src/api.ts</code> on{' '}
-          <code>{API_BASE_URL}</code> and reload to hydrate from real rows.
+          structurer, no API key or database required. Start the server with{' '}
+          <code>npm run serve</code> and a reachable database, then reload to hydrate from
+          real rows.
         </p>
       )}
 

@@ -5,24 +5,38 @@ complaint and watch it move through the same stages as `processRawComplaint()`
 in `src/pipeline.ts`: insert → embed → nearest-report search → match or
 structure → persist.
 
+## Running it
+
+Everything is served from one port by `src/serve.ts` (default **4040**):
+
 ```bash
-npm install
+npm --prefix src/web ci && npm --prefix src/web run build   # or: npm run build:web
+npm run serve                                               # http://localhost:4040
+```
+
+For frontend work with hot reload, run the Vite dev server alongside it. It
+proxies `/api` to 4040, so the app talks to the same paths in both modes:
+
+```bash
 npm run dev     # http://localhost:5173
 ```
+
+Point the proxy elsewhere with `API_TARGET`.
 
 ## Two modes
 
 The app picks its data source at startup:
 
-- **Live** — if the read API (`src/api.ts`) is reachable on `http://localhost:3001`
-  and has rows, the dashboard hydrates from `/raw` and `/processed`.
+- **Live** — if `/api/raw` and `/api/processed` return rows, the dashboard
+  hydrates from them.
 - **Simulation** — otherwise everything runs client-side against a seeded
   corpus. No database, no API key.
 
-Override the API origin with `VITE_API_BASE_URL`.
+The API is same-origin (`/api`) by default; override with `VITE_API_BASE_URL`.
 
-Because the API is GET-only, **submitting a complaint always runs the local
-simulation**, even in live mode. Nothing is written back to Postgres.
+Because the read API is GET-only, **submitting a complaint in the UI always runs
+the local simulation**, even in live mode. Nothing is written back to Postgres —
+real ingestion goes through `POST /api/webhook`.
 
 ## What is simulated
 

@@ -9,8 +9,13 @@ import type { ProcessedReport, RawComplaint } from '../types'
 import type { ComplaintRecord, PipelineState, ReportRecord } from './pipeline'
 import { embed } from './embedding'
 
+/**
+ * Same-origin by default: src/serve.ts serves this app and the API together on
+ * one port, so no CORS and no hardcoded host. In `vite dev` the /api prefix is
+ * proxied to that server (see vite.config.ts).
+ */
 export const API_BASE_URL =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3001'
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '/api'
 
 const TIMEOUT_MS = 2500
 

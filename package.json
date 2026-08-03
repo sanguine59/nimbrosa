@@ -7,7 +7,10 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "migrate": "tsx scripts/migrate.ts"
+    "migrate": "tsx scripts/migrate.ts",
+    "build:web": "npm --prefix src/web ci && npm --prefix src/web run build",
+    "serve": "tsx src/serve.ts",
+    "start": "node dist/src/serve.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
