@@ -1,3 +1,13 @@
+x-backend: &backend
+  build: .
+  env_file: [.env]
+  depends_on:
+    postgres:
+      condition: service_healthy
+  environment:
+    DATABASE_URL: postgres://postgres:postgres@postgres:5432/nimbrosa
+  restart: unless-stopped
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -7,6 +17,26 @@ services:
     ports: ["5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nimbrosa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    <<: *backend
+    command: ["node", "dist/scripts/migrate.js"]
+    restart: "no"
+
+  api:
+    <<: *backend
+    command: ["node", "dist/src/api.js"]
+    ports: ["3001:3001"]
+
+  webhook:
+    <<: *backend
+    command: ["node", "dist/src/server.js"]
+    ports: ["3000:3000"]
 
   pgadmin:
     image: dpage/pgadmin4
