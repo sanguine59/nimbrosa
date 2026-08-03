@@ -5,20 +5,21 @@ x-backend: &backend
     postgres:
       condition: service_healthy
   environment:
-    DATABASE_URL: postgres://postgres:postgres@postgres:5432/nimbrosa
+    DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
   restart: unless-stopped
 
 services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: nimbrosa
-    ports: ["5432:5432"]
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    ports: ["127.0.0.1:5432:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d nimbrosa"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -54,10 +55,11 @@ services:
 
   pgadmin:
     image: dpage/pgadmin4
+    profiles: ["dev"]
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@local.dev
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports: ["5050:80"]
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?set PGADMIN_EMAIL in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env}
+    ports: ["127.0.0.1:5050:80"]
     depends_on: [postgres]
 
   # embeddings:
