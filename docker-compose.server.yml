@@ -38,8 +38,31 @@ services:
       timeout: 5s
       retries: 5
 
+  # Self-hosted embeddings. Serves an OpenAI-compatible POST /v1/embeddings,
+  # which is exactly what src/embedding-client.ts calls, so it needs no adapter.
+  #
+  # BAAI/bge-large-en-v1.5 outputs 1024 dimensions -> EMBEDDING_DIMENSIONS=1024.
+  # That value sets the pgvector column width at migration time, so it must be
+  # right before `npm run migrate` runs; changing it later means a new migration.
+  #
+  # Chat completions are NOT provided here — TEI does embeddings only. The
+  # structuring LLM (OPENROUTER_MODEL) still needs OpenRouter or another
+  # OpenAI-compatible chat endpoint.
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: nimbrosa-embeddings
+    restart: unless-stopped
+    command: ["--model-id", "${EMBEDDING_MODEL_ID:-BAAI/bge-large-en-v1.5}"]
+    ports:
+      # 8080 on the host belongs to heimdall.
+      - "${EMBEDDINGS_HOST_PORT:-8087}:80"
+    volumes:
+      # Cache the weights so a restart does not re-download them.
+      - nimbrosa-embeddings-data:/data
+
 volumes:
   nimbrosa-pgdata:
+  nimbrosa-embeddings-data:
 
 networks:
   default:
