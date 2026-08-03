@@ -173,24 +173,14 @@ interface Raw {
 }
 
 export async function getRaw(pool: pg.Pool, { limit, offset }: Paging): Promise<Raw[]> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows } = await client.query<Raw>(
-      `SELECT id, raw_text, received_at, processed_report_id, status
-         FROM raw_complaints
-        ORDER BY received_at DESC, id DESC
-        LIMIT $1 OFFSET $2`,
-      [limit, offset],
-    );
-    await client.query('COMMIT');
-    return rows;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  const { rows } = await pool.query<Raw>(
+    `SELECT id, raw_text, received_at, processed_report_id, status
+       FROM raw_complaints
+      ORDER BY received_at DESC, id DESC
+      LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
+  return rows;
 }
 
 interface Processed {
@@ -202,22 +192,12 @@ interface Processed {
 }
 
 export async function getProcessed(pool: pg.Pool, { limit, offset }: Paging): Promise<Processed[]> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows } = await client.query<Processed> (
-      `SELECT id, structured_report, canonical_summary, created_at, match_count
-         FROM processed_reports
-        ORDER BY created_at DESC, id DESC
-        LIMIT $1 OFFSET $2`,
-      [limit, offset],
-    );
-    await client.query('COMMIT');
-    return rows;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  const { rows } = await pool.query<Processed>(
+    `SELECT id, structured_report, canonical_summary, created_at, match_count
+       FROM processed_reports
+      ORDER BY created_at DESC, id DESC
+      LIMIT $1 OFFSET $2`,
+    [limit, offset],
+  );
+  return rows;
 }
