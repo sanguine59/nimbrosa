@@ -57,23 +57,50 @@ async function main() {
       return;
     }
 
+    let rawBody: string;
     try {
-      const rawBody = await readBody(req);
-
-      verifyHeaders(normalizeHeaders(req.headers), rawBody);
-
-      const parsed = JSON.parse(rawBody) as { text: string };
-      if (!parsed.text || typeof parsed.text !== "string") {
-        res.writeHead(400).end();
-        return;
-      }
-
-      await boss.send(INPUT_QUEUE, { text: parsed.text });
-
-      res.writeHead(202).end();
+      rawBody = await readBody(req);
     } catch (err) {
-      res.writeHead(401).end();
+      console.error("failed to read request body", err);
+      res.writeHead(400).end();
+      return;
     }
+
+    try {
+      verifyHeaders(normalizeHeaders(req.headers), rawBody);
+    } catch (err) {
+      console.warn("webhook signature rejected:", (err as Error).message);
+      res.writeHead(401).end();
+      return;
+    }
+
+    let parsed: { text?: unknown };
+    try {
+      parsed = JSON.parse(rawBody) as { text?: unknown };
+    } catch {
+      res.writeHead(400).end();
+      return;
+    }
+
+    if (typeof parsed.text !== "string" || !parsed.text.trim()) {
+      res.writeHead(400).end();
+      return;
+    }
+
+    const text = parsed.text;
+
+    try {
+      await boss.send(INPUT_QUEUE, { text });
+    } catch (err) {
+      // Enqueue failures are ours, not the sender's. Returning 401 here would
+      // tell the sender its credentials are wrong and stop it retrying, turning
+      // an outage into silent data loss. 503 keeps the delivery retryable.
+      console.error("failed to enqueue complaint", err);
+      res.writeHead(503, { "Retry-After": "30" }).end();
+      return;
+    }
+
+    res.writeHead(202).end();
   });
 
   server.listen(WEBHOOK_SERVER_PORT, () => console.log(`listening on :${WEBHOOK_SERVER_PORT}`));
