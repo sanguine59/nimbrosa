@@ -1,0 +1,13 @@
+# Keep the build context small and keep secrets out of the image.
+.env
+.env.*
+!.env.example
+
+node_modules
+src/web/node_modules
+dist
+src/web/dist
+
+.git
+.gitea
+*.log

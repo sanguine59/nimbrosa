@@ -89,3 +89,98 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Builds the image on the box and restarts the container, so main is what is
+  # actually serving. The image is built here rather than pulled — there is no
+  # registry in this setup, and the runner and the container share a daemon.
+  #
+  # Requires a runner that can reach the Docker daemon. A containerised
+  # act_runner needs /var/run/docker.sock bind-mounted into it; without that,
+  # the "docker compose" steps below fail with "cannot connect to the Docker
+  # daemon" and nothing is deployed.
+  #
+  # Schema changes are NOT applied here — run the Migrate database job
+  # (workflow_dispatch) first when a release needs one.
+  deploy:
+    name: Deploy
+    needs: [backend, web]
+    if: gitea.event_name == 'push' && gitea.ref == 'refs/heads/main'
+    runs-on: self-hosted
+    # Its own group, deliberately without cancel-in-progress: the workflow-level
+    # concurrency above may cancel a superseded run mid-"compose up", which is
+    # how you get a half-replaced container. Deploys queue instead.
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write .env from the APP_ENV secret
+        env:
+          # Passed through the environment, never interpolated into the script
+          # body: a secret containing quotes or backticks would otherwise be
+          # parsed as shell.
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          if [ -z "$APP_ENV" ]; then
+            echo "::error::APP_ENV secret is empty or unset"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$APP_ENV" > .env
+          echo "wrote .env with $(grep -cE '^[A-Za-z_][A-Za-z0-9_]*=' .env) variables"
+
+      # Two things compose itself would only complain about halfway through.
+      # Note this .env is doing double duty from here on: the app reads it via
+      # env_file, and compose reads it for ${...} interpolation in the db
+      # service — which is why POSTGRES_PASSWORD has to live in APP_ENV too.
+      - name: Check server-specific settings
+        run: |
+          if ! grep -qE '^POSTGRES_PASSWORD=.' .env; then
+            echo "::error::APP_ENV has no POSTGRES_PASSWORD; docker-compose.server.yml requires it to start the db service"
+            exit 1
+          fi
+
+          # The likeliest misconfiguration: an APP_ENV copied from a laptop,
+          # where the database is on localhost. Inside the container that is
+          # the container itself, so the app would come up healthy and answer
+          # every database-backed route with 503 rather than fail loudly.
+          url=$(grep -E '^DATABASE_URL=' .env | head -n1 | cut -d= -f2-)
+          if [ -z "$url" ]; then
+            echo "::error::APP_ENV has no DATABASE_URL"
+            exit 1
+          fi
+          case "$url" in
+            *@localhost:*|*@127.0.0.1:*|*@'[::1]':*)
+              echo "::error::DATABASE_URL points at localhost, which inside the app container is the container itself. Use the compose service name: postgres://<user>:<pass>@db:5432/nimbrosa"
+              exit 1
+              ;;
+          esac
+
+      # Also starts db, via depends_on. --build picks up this commit's code;
+      # the image is rebuilt every deploy so the layer cache does the deduping.
+      - name: Build and start
+        run: docker compose -f docker-compose.server.yml up -d --build app
+
+      # compose up returns once the container is created, not once the server
+      # is listening. Poll the healthcheck so a boot crash fails the run.
+      - name: Wait for health
+        run: |
+          for attempt in $(seq 1 30); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' nimbrosa-app 2>/dev/null || echo missing)
+            case "$status" in
+              healthy) echo "healthy after ${attempt} attempt(s)"; exit 0 ;;
+              unhealthy) echo "::error::container reported unhealthy"; break ;;
+            esac
+            sleep 5
+          done
+          echo "::error::nimbrosa-app did not become healthy"
+          docker compose -f docker-compose.server.yml logs --tail 100 app
+          exit 1
+
+      # Old images accumulate fast when every push builds one. Filtered by
+      # label so a bare `prune` cannot collect another project's images — this
+      # daemon is shared with whatever else runs on the box.
+      - name: Prune superseded images
+        if: always()
+        run: docker image prune -f --filter label=org.opencontainers.image.title=nimbrosa

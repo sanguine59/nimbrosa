@@ -1,8 +1,9 @@
-# Postgres for a shared self-hosted box, where docker-compose.yml cannot be used
-# as-is: it binds 5432 and 5050, and on that host both are already taken.
+# The full stack for a shared self-hosted box: the app itself plus the database
+# and embedding server it depends on. docker-compose.yml cannot be used as-is
+# there — it binds 5432 and 5050, and on that host both are already taken.
 #
-# This file brings up only the database, on 5433, under its own volume and
-# network. It does not touch any existing container.
+# Every published port here is offset onto a free one, under this file's own
+# volumes and network. It does not touch any existing container.
 #
 # pgvector/pgvector:pg16 is required, not a preference — migrations/init.sql
 # runs CREATE EXTENSION vector and the schema uses vector() columns, neither of
@@ -19,6 +20,49 @@
 name: nimbrosa
 
 services:
+  # The application: compiled backend plus the built SPA, one port, one process.
+  #
+  # Configuration comes entirely from .env (the same file the APP_ENV secret
+  # writes out in CI), so nothing is duplicated here. Two values in that file
+  # must differ from a laptop's, because they are resolved from inside this
+  # container and not from the host:
+  #
+  #   DATABASE_URL=postgres://<user>:<pass>@db:5432/nimbrosa
+  #     — "db" and port 5432, the service name and in-network port. The host's
+  #       5433 mapping below is for psql from the box itself, not for this app.
+  #
+  #   EMBEDDING_BASE_URL  — leave unset to use OpenRouter. It CANNOT be pointed
+  #     at the embeddings service below: src/http.ts permits http:// only for
+  #     localhost, and "http://embeddings/v1" is neither localhost nor https.
+  #     Using the self-hosted embedder from in here needs that check widened.
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nimbrosa-app:latest
+    container_name: nimbrosa-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Fixed inside the container; remap on the host with APP_HOST_PORT
+      # instead. Set last so a stale PORT in .env cannot desync it from the
+      # port mapping and the healthcheck below.
+      PORT: 4040
+    ports:
+      - "${APP_HOST_PORT:-4040}:4040"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # busybox wget, already in node:22-alpine — no extra layer for curl.
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:4040/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # First boot compiles nothing but does open the pg-boss connection.
+      start_period: 20s
+
   db:
     image: pgvector/pgvector:pg16
     container_name: nimbrosa-db
