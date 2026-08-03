@@ -32,6 +32,42 @@ jobs:
       - name: Build
         run: npm run build
 
+  # Applies the schema using the environment stored in the APP_ENV secret.
+  # Manual only — a database migration should be an explicit decision, never a
+  # side effect of pushing to main.
+  migrate:
+    name: Migrate database
+    if: gitea.event_name == 'workflow_dispatch'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Write .env from the APP_ENV secret
+        env:
+          # Passed through the environment, never interpolated into the script
+          # body: a secret containing quotes or backticks would otherwise be
+          # parsed as shell.
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          if [ -z "$APP_ENV" ]; then
+            echo "::error::APP_ENV secret is empty or unset"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$APP_ENV" > .env
+          echo "wrote .env with $(grep -cE '^[A-Za-z_][A-Za-z0-9_]*=' .env) variables"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # npm run migrate loads .env itself via --env-file-if-exists.
+      - name: Apply migrations
+        run: npm run migrate
+
   web:
     name: Frontend (lint + build)
     runs-on: self-hosted
