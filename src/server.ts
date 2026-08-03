@@ -1,7 +1,8 @@
 import { createServer, IncomingMessage, type IncomingHttpHeaders } from "http";
 import { PgBoss } from "pg-boss";
 import { verifyHeaders, type WebhookHeaders } from "./webhook.js";
-import { ingestComplaint } from "./index.js";
+import { createPool } from "./db.js";
+import { processRawComplaint } from "./pipeline.js";
 
 const dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) throw new Error("Missing DATABASE_URL");
@@ -39,8 +40,10 @@ async function main() {
   await boss.start();
   await boss.createQueue(INPUT_QUEUE);
 
+  const pool = createPool(dbUrl);
+
   await boss.work<{ text: string }>(INPUT_QUEUE, async ([job]) => {
-    await ingestComplaint(job.data.text);
+    await processRawComplaint(job.data.text, { pool });
   });
 
   const server = createServer(async (req, res) => {
